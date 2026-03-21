@@ -1,5 +1,6 @@
 """This module contains functions to download, deobfuscate, and extract asset bundles."""
 
+import asyncio
 import orjson as json
 import logging
 from typing import Dict, List, Tuple
@@ -22,22 +23,37 @@ logger = logging.getLogger("live2d")
 
 
 async def download_deobfuscate_bundle(
-    url: str, bundle_save_path: Path, headers: Dict[str, str]
+    url: str, bundle_save_path: Path, headers: Dict[str, str],
+    max_retries: int = 5, retry_delay: float = 2.0,
 ) -> Tuple[str, Dict]:
     """Download and deobfuscate the bundle."""
-    # Download the bundle
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
-            if response.status == 200:
-                # Read the response data
-                data = await response.read()
-                # Deobfuscate the data
-                deobfuscated_data = await deobfuscate(data)
-                # Save the deobfuscated data to the file
-                async with await open_file(bundle_save_path, "wb") as f:
-                    await f.write(deobfuscated_data)
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.read()
+                        deobfuscated_data = await deobfuscate(data)
+                        async with await open_file(bundle_save_path, "wb") as f:
+                            await f.write(deobfuscated_data)
+                        return
+                    else:
+                        raise aiohttp.ClientError(
+                            f"Failed to download {url} (status {response.status})"
+                        )
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            last_exc = e
+            if attempt < max_retries:
+                delay = retry_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "Download failed (attempt %d/%d): %s, retrying in %.1fs",
+                    attempt, max_retries, e, delay,
+                )
+                await asyncio.sleep(delay)
             else:
-                raise aiohttp.ClientError(f"Failed to download {url}")
+                logger.error("Download failed after %d attempts: %s", max_retries, url)
+    raise last_exc
 
 
 async def extract_asset_bundle(

@@ -2,13 +2,8 @@ import os
 
 from anyio import Path
 
-from model import SekaiServerRegion
-
 # Proxy for fetching restricted content
 PROXY_URL = None
-
-# Server region
-REGION = SekaiServerRegion.JP
 
 # Fallback unity version, replace with the correct version if needed
 UNITY_VERSION = "2022.3.21f1"

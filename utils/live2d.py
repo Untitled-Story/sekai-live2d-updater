@@ -511,7 +511,10 @@ async def restore_live2d_motions(
                 f"Failed to load motion bundle {motion_base_bundle_path}"
             )
 
-        container_items = montion_base.container.items()
+        # Materialize container items once. Some UnityPy versions expose a
+        # one-shot iterator here, and the fallback scans below need to reuse it
+        # after locating BuildMotionData.
+        container_items = list(montion_base.container.items())
         # Find the buildmotiondata
         buildmotiondata_path, buildmotiondata = next(
             (
@@ -544,7 +547,7 @@ async def restore_live2d_motions(
                 and Path(asset_path).suffix == ".anim"
             ]
             if not container_facials:
-                logger.exception(
+                logger.error(
                     "Failed to find facials in %s after searching container items",
                     motion_base_bundle_path,
                 )
@@ -575,7 +578,7 @@ async def restore_live2d_motions(
                 and Path(asset_path).suffix == ".anim"
             ]
             if not container_motions:
-                logger.exception(
+                logger.error(
                     "Failed to find motions in %s after searching container items",
                     motion_base_bundle_path,
                 )

@@ -1,6 +1,7 @@
 import asyncio
 import orjson as json
 import logging
+import shutil
 from typing import Dict, List, Tuple
 
 import aiohttp
@@ -94,6 +95,12 @@ async def do_download(dl_list: List[Tuple], config, headers, cookie):
                     program,
                     " ".join(args),
                 )
+
+                if shutil.which(program) is None:
+                    raise RuntimeError(
+                        f"Upload program '{program}' not found in PATH. "
+                        "Install it or set ASSET_REMOTE_STORAGE = [] to disable uploads."
+                    )
 
                 # Execute the command
                 upload_process = await asyncio.create_subprocess_exec(program, *args)

@@ -30,10 +30,12 @@ async def worker(
         bundle_save_path: Path = (
             config.ASSET_LOCAL_BUNDLE_CACHE_DIR / bundle["bundleName"]
         )
+
         # Create the directory if it doesn't exist
         await bundle_save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Download the bundle
+        # Download the bundle. The download list has already been filtered by
+        # manifest hash changes, so changed bundles must overwrite local cache.
         await download_deobfuscate_bundle(
             url,
             bundle_save_path,
