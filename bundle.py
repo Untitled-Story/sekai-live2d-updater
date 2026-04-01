@@ -22,6 +22,42 @@ from utils.live2d import (
 logger = logging.getLogger("live2d")
 
 
+def lowercase_model3_paths(data: bytes) -> bytes:
+    """Convert FileReferences paths (Moc, Textures, Physics) in model3.json to lowercase."""
+    try:
+        tree = json.loads(data)
+    except (json.JSONDecodeError, ValueError):
+        return data
+
+    if not isinstance(tree, dict) or "FileReferences" not in tree:
+        return data
+
+    file_refs = tree["FileReferences"]
+    changed = False
+
+    for key in ("Moc", "Physics"):
+        if key in file_refs and isinstance(file_refs[key], str):
+            if any(c.isupper() for c in file_refs[key]):
+                file_refs[key] = file_refs[key].lower()
+                changed = True
+
+    if "Textures" in file_refs and isinstance(file_refs["Textures"], list):
+        new_list = []
+        for path in file_refs["Textures"]:
+            if any(c.isupper() for c in path):
+                new_list.append(path.lower())
+                changed = True
+            else:
+                new_list.append(path)
+        file_refs["Textures"] = new_list
+
+    if changed:
+        logger.debug("Lowercased FileReferences paths in model3.json")
+        return json.dumps(tree, option=json.OPT_INDENT_2)
+
+    return data
+
+
 async def download_deobfuscate_bundle(
     url: str, bundle_save_path: Path, headers: Dict[str, str],
     max_retries: int = 5, retry_delay: float = 2.0,
@@ -148,6 +184,8 @@ async def extract_asset_bundle(
                             data_bytes = data.m_Script.encode(
                                 "utf-8", "surrogateescape"
                             )
+                            if save_path.suffix == ".json" and save_path.name.endswith(".model3.json"):
+                                data_bytes = lowercase_model3_paths(data_bytes)
                             await f.write(data_bytes)
                             if save_path.suffix == ".moc3":
                                 param_id_map.update(
