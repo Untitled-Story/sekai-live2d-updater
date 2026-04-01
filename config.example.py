@@ -48,3 +48,8 @@ ASSET_REMOTE_STORAGE = [
         "args": ["copy", "src", "dst"]
     },
 ]
+
+# Webhook notification settings
+WEBHOOK_URL = None  # e.g. "http://127.0.0.1:8080/webhook/send"
+WEBHOOK_SECRET = None
+WEBHOOK_TIMEOUT = 10

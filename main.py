@@ -15,6 +15,7 @@ from helpers import (
     setup_logging_queue
 )
 from utils.live2d import restore_live2d_motions
+from webhook import on_updated
 from worker import worker
 
 logger = logging.getLogger("live2d")
@@ -136,6 +137,8 @@ async def do_download(dl_list: List[Tuple], config, headers, cookie):
                     )
                 else:
                     logger.info("Successfully uploaded %s to %s", src_path, remote_path)
+
+    await on_updated(len(added_models))
 
 
 async def main():
