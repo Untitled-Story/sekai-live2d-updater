@@ -5,17 +5,22 @@ import aiohttp
 logger = logging.getLogger("live2d")
 
 
-async def on_updated(added_models: int) -> None:
+async def on_updated(added_models: list[str]) -> None:
     import config
 
     webhook_url = getattr(config, "WEBHOOK_URL", None)
-    if not webhook_url or added_models == 0:
+    if not webhook_url or not added_models:
         return
 
     timeout = getattr(config, "WEBHOOK_TIMEOUT", 10)
     webhook_secret = getattr(config, "WEBHOOK_SECRET", None)
 
-    payload = {"data": f"收到 {added_models} 个 Live2D 模型更新。"}
+    display_limit = 10
+    names_display = "\n".join(f"- {name}" for name in added_models[:display_limit])
+    if len(added_models) > display_limit:
+        names_display += f"\n- ...及其他 {len(added_models) - display_limit} 个模型"
+
+    payload = {"data": f"收到 {len(added_models)} 个 Live2D 模型更新。\n{names_display}"}
     if webhook_secret:
         payload["secret"] = webhook_secret
 

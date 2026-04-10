@@ -138,7 +138,11 @@ async def do_download(dl_list: List[Tuple], config, headers, cookie):
                 else:
                     logger.info("Successfully uploaded %s to %s", src_path, remote_path)
 
-    await on_updated(len(added_models))
+    added_model_names = [
+        f"{model_path}/{model_file}" if model_path != "." else model_file
+        for model_path, model_file in added_models
+    ]
+    await on_updated(added_model_names)
 
 
 async def main():
