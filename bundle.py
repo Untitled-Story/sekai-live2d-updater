@@ -20,6 +20,8 @@ from utils.live2d import (
 )
 
 logger = logging.getLogger("live2d")
+DEOBFUSCATION_XOR_MASK = (b"\xff" * 5 + b"\x00" * 3) * 16
+DOWNLOAD_CHUNK_SIZE = 1 << 16
 
 
 def lowercase_model3_paths(data: bytes) -> bytes:
@@ -58,28 +60,85 @@ def lowercase_model3_paths(data: bytes) -> bytes:
     return data
 
 
+async def write_deobfuscated_bundle(
+    response: aiohttp.ClientResponse,
+    bundle_save_path: Path,
+) -> None:
+    mode = None
+    header_written = False
+    pending = bytearray()
+
+    async with await open_file(bundle_save_path, "wb") as f:
+        async for chunk in response.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
+            pending.extend(chunk)
+
+            if mode is None:
+                if len(pending) < 4:
+                    continue
+
+                prefix = bytes(pending[:4])
+                if prefix == b"\x20\x00\x00\x00":
+                    mode = "strip4"
+                    del pending[:4]
+                    header_written = True
+                elif prefix == b"\x10\x00\x00\x00":
+                    mode = "xor128"
+                    del pending[:4]
+                else:
+                    mode = "plain"
+                    header_written = True
+
+            if mode == "xor128" and not header_written:
+                if len(pending) < 128:
+                    continue
+
+                header = bytes(
+                    a ^ b for a, b in zip(pending[:128], DEOBFUSCATION_XOR_MASK)
+                )
+                await f.write(header)
+                del pending[:128]
+                header_written = True
+
+            if header_written and pending:
+                await f.write(pending)
+                pending.clear()
+
+        if mode is None:
+            await f.write(pending)
+        elif mode == "xor128" and not header_written:
+            header = bytes(
+                a ^ b for a, b in zip(pending[:128], DEOBFUSCATION_XOR_MASK)
+            )
+            await f.write(header)
+            await f.write(pending[128:])
+        elif pending:
+            await f.write(pending)
+
+
 async def download_deobfuscate_bundle(
-    url: str, bundle_save_path: Path, headers: Dict[str, str],
-    max_retries: int = 5, retry_delay: float = 2.0,
+    url: str,
+    bundle_save_path: Path,
+    session: aiohttp.ClientSession,
+    headers: Dict[str, str],
+    max_retries: int = 5,
+    retry_delay: float = 2.0,
 ) -> Tuple[str, Dict]:
     """Download and deobfuscate the bundle."""
     last_exc = None
     for attempt in range(1, max_retries + 1):
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        data = await response.read()
-                        deobfuscated_data = await deobfuscate(data)
-                        async with await open_file(bundle_save_path, "wb") as f:
-                            await f.write(deobfuscated_data)
-                        return
-                    else:
-                        raise aiohttp.ClientError(
-                            f"Failed to download {url} (status {response.status})"
-                        )
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    raise aiohttp.ClientError(
+                        f"Failed to download {url} (status {response.status})"
+                    )
+
+                await write_deobfuscated_bundle(response, bundle_save_path)
+                return
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             last_exc = e
+            if await bundle_save_path.exists():
+                await bundle_save_path.unlink()
             if attempt < max_retries:
                 delay = retry_delay * (2 ** (attempt - 1))
                 logger.warning(
